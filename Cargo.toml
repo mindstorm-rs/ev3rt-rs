@@ -1,0 +1,15 @@
+[package]
+name = "ev3rt"
+version = "0.1.0"
+authors = ["Massimiliano Mantione <massimiliano.mantione@gmail.com>"]
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
