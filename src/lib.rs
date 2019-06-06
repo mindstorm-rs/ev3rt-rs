@@ -208,7 +208,7 @@ pub type BoolT = i8;
 extern "C" {
     fn ev3_exit_task() -> ();
     fn ev3_fch_hrt() -> HRTCNT;
-    fn ev3_sleep(ms: i32) -> ER;
+    fn ev3_sleep(ticks: i32) -> ER;
 
     fn ev3_battery_current_mA() -> i32;
     fn ev3_battery_voltage_mV() -> i32;
@@ -262,8 +262,11 @@ pub fn fch_hrt() -> HRTCNT {
     unsafe { ev3_fch_hrt() }
 }
 
-pub fn sleep(ms: i32) -> ER {
-    unsafe { ev3_sleep(ms) }
+pub fn msleep(ms: i32) -> ER {
+    unsafe { ev3_sleep(ms * 1000) }
+}
+pub fn usleep(us: i32) -> ER {
+    unsafe { ev3_sleep(us) }
 }
 
 pub fn battery_current_ma() -> i32 {
