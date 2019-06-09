@@ -203,11 +203,12 @@ pub type TMO = i32;
 pub type RELTIM = u32;
 pub type HRTCNT = u32;
 pub type SYSTIM = i64;
+pub type SYSUTM = u64;
 pub type BoolT = i8;
 
 extern "C" {
     fn ev3_exit_task() -> ();
-    fn ev3_fch_hrt() -> HRTCNT;
+    fn ev3_get_utm(p_sysutm: &mut SYSUTM) -> ER;
     fn ev3_sleep(ticks: i32) -> ER;
 
     fn ev3_battery_current_mA() -> i32;
@@ -258,15 +259,22 @@ extern "C" {
     fn ev3_led_set_color(color: LedColor) -> ER;
 }
 
-pub fn fch_hrt() -> HRTCNT {
-    unsafe { ev3_fch_hrt() }
+pub fn get_utm(p_sysutm: &mut SYSUTM) -> ER {
+    unsafe { ev3_get_utm(p_sysutm) }
+}
+
+pub fn get_utime() -> SYSUTM {
+    let mut res: SYSUTM = 0;
+    match get_utm(&mut res) {
+        ER::OK => res,
+        _ => {
+            abort();
+        }
+    }
 }
 
 pub fn msleep(ms: i32) -> ER {
-    unsafe { ev3_sleep(ms * 1000) }
-}
-pub fn usleep(us: i32) -> ER {
-    unsafe { ev3_sleep(us) }
+    unsafe { ev3_sleep(ms) }
 }
 
 pub fn battery_current_ma() -> i32 {
