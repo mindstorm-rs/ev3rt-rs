@@ -1,6 +1,6 @@
 [package]
 name = "ev3rt"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Massimiliano Mantione <massimiliano.mantione@gmail.com>"]
 description = "Rust bindings for ev3rt"
 license= "MIT"
