@@ -311,6 +311,11 @@ pub fn font_get_size(font: LcdFont) -> (i32, i32) {
     }
 }
 
+/// Draw a string into lcd from a starting position
+///
+/// The point (0, 0) is in upper-left position
+/// X axis is horizontal, from left to right
+/// Y axis is vertical, from top to bottom
 pub fn lcd_draw_string(s: &str, x: i32, y: i32) -> ER {
     const MAX: usize = 32;
     const BYTES: usize = MAX + 1;
