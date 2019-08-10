@@ -294,6 +294,19 @@ pub fn button_is_pressed(button: Button) -> bool {
     }
 }
 
+pub fn any_button_is_pressed() -> bool {
+    button_is_pressed(Button::BACK)
+        || button_is_pressed(Button::ENTER)
+        || button_is_pressed(Button::UP)
+        || button_is_pressed(Button::DOWN)
+        || button_is_pressed(Button::LEFT)
+        || button_is_pressed(Button::RIGHT)
+}
+
+pub fn wait_for_buttons_released() {
+    while any_button_is_pressed() {}
+}
+
 pub fn lcd_set_font(font: LcdFont) -> ER {
     unsafe { ev3_lcd_set_font(font) }
 }
