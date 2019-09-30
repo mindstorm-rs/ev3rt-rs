@@ -11,7 +11,7 @@ pub extern "C" fn abort() -> ! {
     sensor_config(SensorPort::S3, SensorType::NONE);
     sensor_config(SensorPort::S4, SensorType::NONE);
     unsafe { ev3_exit_task() }
-    loop {}
+    #[warn(clippy::empty_loop)] loop {}
 }
 
 use core::panic::PanicInfo;
@@ -143,6 +143,7 @@ pub enum SensorType {
     HtNxtACCEL = 6,
     HtNxtCOLOR = 7,
     NxtTEMP = 8,
+    NxtINFRARED = 9,
 }
 impl From<i32> for SensorType {
     fn from(t: i32) -> SensorType {
@@ -155,6 +156,7 @@ impl From<i32> for SensorType {
             6 => SensorType::HtNxtACCEL,
             7 => SensorType::HtNxtCOLOR,
             8 => SensorType::NxtTEMP,
+            9 => SensorType::NxtINFRARED,
             _ => SensorType::NONE,
         }
     }
@@ -251,6 +253,7 @@ extern "C" {
     // fn ht_nxt_color_sensor_measure_color(port: SensorPort, color: *mut u8) -> BoolT;
     // fn ht_nxt_color_sensor_measure_rgb(port: SensorPort, val: *mut RgbRaw) -> BoolT;
     // fn nxt_temp_sensor_measure(port: SensorPort, temp: *mut f32) -> BoolT;
+    fn nxt_ultrasonic_sensor_get_distance(port: SensorPort, distance: *mut i16) -> BoolT;
 
     // fn ev3_speaker_set_volume(volume: u8) -> ER;
     // fn ev3_speaker_play_tone(frequency: u16, duration: i32) -> ER;
@@ -286,11 +289,7 @@ pub fn battery_voltage_mv() -> i32 {
 
 pub fn button_is_pressed(button: Button) -> bool {
     unsafe {
-        if ev3_button_is_pressed(button) != 0 {
-            true
-        } else {
-            false
-        }
+        ev3_button_is_pressed(button) != 0 
     }
 }
 
@@ -340,7 +339,7 @@ pub fn lcd_draw_string(s: &str, x: i32, y: i32) -> ER {
         chars[i] = c;
         chars[i + 1] = 0;
     }
-    unsafe { ev3_lcd_draw_string(&mut (chars[0]), x, y) }
+    unsafe { ev3_lcd_draw_string(&(chars[0]), x, y) }
 }
 
 pub fn lcd_draw_line(x0: i32, y0: i32, x1: i32, y1: i32) -> ER {
@@ -377,9 +376,11 @@ pub fn motor_reset_counts(port: MotorPort) -> ER {
 pub fn motor_set_power(port: MotorPort, power: i32) -> ER {
     unsafe { ev3_motor_set_power(port, power) }
 }
+
 pub fn motor_get_power(port: MotorPort) -> i32 {
     unsafe { ev3_motor_get_power(port) }
 }
+
 pub fn motor_stop(port: MotorPort, brake: bool) -> ER {
     unsafe { ev3_motor_stop(port, if brake { 1 } else { 0 }) }
 }
@@ -398,12 +399,15 @@ pub fn sensor_get_type(port: SensorPort) -> SensorType {
 pub fn color_sensor_get_color(port: SensorPort) -> SensorColorCode {
     unsafe { ev3_color_sensor_get_color(port) }
 }
+
 pub fn color_sensor_get_reflect(port: SensorPort) -> u8 {
     unsafe { ev3_color_sensor_get_reflect(port) }
 }
+
 pub fn color_sensor_get_ambient(port: SensorPort) -> u8 {
     unsafe { ev3_color_sensor_get_ambient(port) }
 }
+
 pub fn color_sensor_get_rgb(port: SensorPort) -> RgbRaw {
     let mut r = RgbRaw { r: 0, g: 0, b: 0 };
     unsafe {
@@ -411,12 +415,15 @@ pub fn color_sensor_get_rgb(port: SensorPort) -> RgbRaw {
     }
     r
 }
+
 pub fn gyro_sensor_get_angle(port: SensorPort) -> i16 {
     unsafe { ev3_gyro_sensor_get_angle(port) }
 }
+
 pub fn gyro_sensor_get_rate(port: SensorPort) -> i16 {
     unsafe { ev3_gyro_sensor_get_rate(port) }
 }
+
 pub fn gyro_sensor_reset(port: SensorPort) -> ER {
     unsafe { ev3_gyro_sensor_reset(port) }
 }
@@ -424,6 +431,7 @@ pub fn gyro_sensor_reset(port: SensorPort) -> ER {
 pub fn ultrasonic_sensor_get_distance(port: SensorPort) -> i16 {
     unsafe { ev3_ultrasonic_sensor_get_distance(port) }
 }
+
 // fn ev3_ultrasonic_sensor_listen(port: SensorPort) -> BoolT;
 
 pub fn infrared_sensor_get_distance(port: SensorPort) -> u8 {
@@ -437,6 +445,14 @@ pub fn infrared_sensor_get_distance(port: SensorPort) -> u8 {
 // fn ht_nxt_color_sensor_measure_color(port: SensorPort, color: *mut u8) -> BoolT;
 // fn ht_nxt_color_sensor_measure_rgb(port: SensorPort, val: *mut rgb_raw_t) -> BoolT;
 // fn nxt_temp_sensor_measure(port: SensorPort, temp: *mut f32) -> BoolT;
+
+pub fn ultrasonic_sensor_get_distance_nxt(port: SensorPort) -> i16 {
+    let mut d = 0;
+    unsafe {
+        nxt_ultrasonic_sensor_get_distance(port, &mut d);
+    }
+    d
+}
 
 // fn ev3_speaker_set_volume(volume: u8) -> ER;
 // fn ev3_speaker_play_tone(frequency: u16, duration: i32) -> ER;
