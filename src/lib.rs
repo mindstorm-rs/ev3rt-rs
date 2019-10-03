@@ -11,7 +11,8 @@ pub extern "C" fn abort() -> ! {
     sensor_config(SensorPort::S3, SensorType::NONE);
     sensor_config(SensorPort::S4, SensorType::NONE);
     unsafe { ev3_exit_task() }
-    #[warn(clippy::empty_loop)] loop {}
+    #[warn(clippy::empty_loop)]
+    loop {}
 }
 
 use core::panic::PanicInfo;
@@ -142,8 +143,8 @@ pub enum SensorType {
     INFRARED = 5,
     HtNxtACCEL = 6,
     HtNxtCOLOR = 7,
-    NxtTEMP = 8,
-    NxtINFRARED = 9,
+    NxtULTRASONIC = 8,
+    NxtTEMP = 9,
 }
 impl From<i32> for SensorType {
     fn from(t: i32) -> SensorType {
@@ -155,8 +156,8 @@ impl From<i32> for SensorType {
             5 => SensorType::INFRARED,
             6 => SensorType::HtNxtACCEL,
             7 => SensorType::HtNxtCOLOR,
-            8 => SensorType::NxtTEMP,
-            9 => SensorType::NxtINFRARED,
+            8 => SensorType::NxtULTRASONIC,
+            9 => SensorType::NxtTEMP,
             _ => SensorType::NONE,
         }
     }
@@ -288,9 +289,7 @@ pub fn battery_voltage_mv() -> i32 {
 }
 
 pub fn button_is_pressed(button: Button) -> bool {
-    unsafe {
-        ev3_button_is_pressed(button) != 0 
-    }
+    unsafe { ev3_button_is_pressed(button) != 0 }
 }
 
 pub fn any_button_is_pressed() -> bool {
