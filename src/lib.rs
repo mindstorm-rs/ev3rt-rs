@@ -214,6 +214,11 @@ extern "C" {
     fn ev3_get_utm(p_sysutm: &mut SYSUTM) -> ER;
     fn ev3_sleep(ticks: i32) -> ER;
 
+    fn ev3_bluetooth_agent_set_period_ms(ms: u32);
+    fn ev3_bluetooth_agent_schedule_write(buf: *const u8, size: usize);
+    fn ev3_bluetooth_agent_get_last_char() -> u8;
+    fn ev3_schedule_bluetooth_agent_task();
+
     fn ev3_battery_current_mA() -> i32;
     fn ev3_battery_voltage_mV() -> i32;
     fn ev3_button_is_pressed(button: Button) -> BoolT;
@@ -279,6 +284,33 @@ pub fn get_utime() -> SYSUTM {
 
 pub fn msleep(ms: i32) -> ER {
     unsafe { ev3_sleep(ms) }
+}
+
+pub fn bluetooth_agent_set_period_ms(ms: u32) {
+    unsafe {
+        ev3_bluetooth_agent_set_period_ms(ms);
+    }
+}
+
+pub fn bluetooth_agent_schedule_write(buf: &[u8]) {
+    unsafe {
+        ev3_bluetooth_agent_schedule_write(buf.as_ptr(), buf.len());
+    }
+}
+
+pub fn bluetooth_agent_get_last_char() -> Option<u8> {
+    let received = unsafe { ev3_bluetooth_agent_get_last_char() };
+    if received == 0 {
+        None
+    } else {
+        Some(received)
+    }
+}
+
+pub fn schedule_bluetooth_agent_task() {
+    unsafe {
+        ev3_schedule_bluetooth_agent_task();
+    }
 }
 
 pub fn battery_current_ma() -> i32 {
