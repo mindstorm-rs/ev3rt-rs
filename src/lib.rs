@@ -206,13 +206,13 @@ pub type TMO = i32;
 pub type RELTIM = u32;
 pub type HRTCNT = u32;
 pub type SYSTIM = i64;
-pub type SYSUTM = u64;
 pub type BoolT = i8;
 
 extern "C" {
     fn ev3_exit_task() -> ();
-    fn ev3_get_utm(p_sysutm: &mut SYSUTM) -> ER;
-    fn ev3_sleep(ticks: i32) -> ER;
+    fn ev3_get_tim(p_sysutm: *mut SYSTIM) -> ER;
+    fn ev3_fch_hrt() -> HRTCNT;
+    fn ev3_sleep(ticks: TMO) -> ER;
 
     fn ev3_battery_current_mA() -> i32;
     fn ev3_battery_voltage_mV() -> i32;
@@ -255,6 +255,9 @@ extern "C" {
     // fn ht_nxt_color_sensor_measure_rgb(port: SensorPort, val: *mut RgbRaw) -> BoolT;
     // fn nxt_temp_sensor_measure(port: SensorPort, temp: *mut f32) -> BoolT;
     fn nxt_ultrasonic_sensor_get_distance(port: SensorPort, distance: *mut i16) -> BoolT;
+    fn nxt_ultrasonic_sensor_get_last_reading(port: SensorPort, distance: *mut i16) -> BoolT;
+    fn nxt_ultrasonic_sensor_oneshot_reading(port: SensorPort) -> BoolT;
+    fn nxt_ultrasonic_sensor_warm_reset(port: SensorPort) -> BoolT;
 
     // fn ev3_speaker_set_volume(volume: u8) -> ER;
     // fn ev3_speaker_play_tone(frequency: u16, duration: i32) -> ER;
@@ -263,22 +266,24 @@ extern "C" {
     fn ev3_led_set_color(color: LedColor) -> ER;
 }
 
-pub fn get_utm(p_sysutm: &mut SYSUTM) -> ER {
-    unsafe { ev3_get_utm(p_sysutm) }
+pub fn get_tim(p_sysutm: &mut SYSTIM) -> ER {
+    unsafe { ev3_get_tim(p_sysutm) }
 }
 
-pub fn get_utime() -> SYSUTM {
-    let mut res: SYSUTM = 0;
-    match get_utm(&mut res) {
-        ER::OK => res,
-        _ => {
-            abort();
-        }
-    }
+pub fn get_hrt() -> HRTCNT {
+    unsafe { ev3_fch_hrt() }
+}
+
+pub fn get_utime() -> u32 {
+    get_hrt()
 }
 
 pub fn msleep(ms: i32) -> ER {
-    unsafe { ev3_sleep(ms) }
+    unsafe { ev3_sleep(ms * 1000) }
+}
+
+pub fn usleep(us: i32) -> ER {
+    unsafe { ev3_sleep(us) }
 }
 
 pub fn battery_current_ma() -> i32 {
@@ -444,6 +449,24 @@ pub fn infrared_sensor_get_distance(port: SensorPort) -> u8 {
 // fn ht_nxt_color_sensor_measure_color(port: SensorPort, color: *mut u8) -> BoolT;
 // fn ht_nxt_color_sensor_measure_rgb(port: SensorPort, val: *mut rgb_raw_t) -> BoolT;
 // fn nxt_temp_sensor_measure(port: SensorPort, temp: *mut f32) -> BoolT;
+
+pub fn ultrasonic_sensor_get_last_reading_nxt(port: SensorPort) -> i16 {
+    let mut d = 0;
+    unsafe {
+        nxt_ultrasonic_sensor_get_last_reading(port, &mut d);
+    }
+    d
+}
+
+pub fn ultrasonic_sensor_oneshot_reading_nxt(port: SensorPort) -> bool {
+    let r = unsafe { nxt_ultrasonic_sensor_oneshot_reading(port) };
+    r == 0
+}
+
+pub fn ultrasonic_sensor_warm_reset_nxt(port: SensorPort) -> bool {
+    let r = unsafe { nxt_ultrasonic_sensor_warm_reset(port) };
+    r == 0
+}
 
 pub fn ultrasonic_sensor_get_distance_nxt(port: SensorPort) -> i16 {
     let mut d = 0;
