@@ -94,6 +94,9 @@ pub enum LcdColor {
 
 pub const LCD_WIDTH: i32 = 178;
 pub const LCD_HEIGHT: i32 = 128;
+pub const LCD_FRAMEBUFFER_ROW_BYTES: usize = 60;
+pub const LCD_FRAMEBUFFER_ROWS: usize = 128;
+pub const LCD_FRAMEBUFFER_SIZE: usize = LCD_FRAMEBUFFER_ROW_BYTES * LCD_FRAMEBUFFER_ROWS;
 
 #[repr(i32)]
 #[derive(Clone, Copy, PartialEq)]
@@ -230,6 +233,7 @@ extern "C" {
     fn ev3_font_get_size(font: LcdFont, width: *mut i32, height: *mut i32) -> ER;
     fn ev3_lcd_draw_string(str: *const u8, x: i32, y: i32) -> ER;
     fn ev3_lcd_draw_line(x0: i32, y0: i32, x1: i32, y1: i32) -> ER;
+    fn ev3_lcd_pixels() -> *mut u8;
     fn ev3_lcd_fill_rect(x: i32, y: i32, w: i32, h: i32, color: LcdColor) -> ER;
     fn ev3_motor_config(port: MotorPort, mt: MotorType) -> ER;
     fn ev3_motor_get_type(port: MotorPort) -> ErUint;
@@ -254,11 +258,16 @@ extern "C" {
     fn ev3_infrared_sensor_get_distance(port: SensorPort) -> u8;
     // fn ev3_infrared_sensor_seek(port: SensorPort) -> IrSeek;
     // fn ev3_infrared_sensor_get_remote(port: SensorPort) -> IrRemote;
-    // fn ev3_touch_sensor_is_pressed(port: SensorPort) -> BoolT;
+    fn ev3_touch_sensor_is_pressed(port: SensorPort) -> BoolT;
+    fn ev3_touch_sensor_analog_read_pin1(port: SensorPort) -> i16;
     // fn ht_nxt_accel_sensor_measure(port: SensorPort, axes: *mut i16) -> BoolT;
     // fn ht_nxt_color_sensor_measure_color(port: SensorPort, color: *mut u8) -> BoolT;
     // fn ht_nxt_color_sensor_measure_rgb(port: SensorPort, val: *mut RgbRaw) -> BoolT;
     // fn nxt_temp_sensor_measure(port: SensorPort, temp: *mut f32) -> BoolT;
+    fn nxt_ultrasonic_sensor_get_last_reading(port: SensorPort) -> i16;
+    fn nxt_ultrasonic_sensor_did_reset(port: SensorPort) -> BoolT;
+    fn nxt_ultrasonic_sensor_request_read(port: SensorPort) -> BoolT;
+    fn nxt_ultrasonic_sensor_request_reset(port: SensorPort) -> BoolT;
     fn nxt_ultrasonic_sensor_get_distance(port: SensorPort, distance: *mut i16) -> BoolT;
 
     // fn ev3_speaker_set_volume(volume: u8) -> ER;
@@ -381,8 +390,16 @@ pub fn lcd_fill_rect(x: i32, y: i32, w: i32, h: i32, color: LcdColor) -> ER {
     unsafe { ev3_lcd_fill_rect(x, y, w, h, color) }
 }
 
-pub fn lcd_clear() -> ER {
-    unsafe { ev3_lcd_fill_rect(0, 0, LCD_WIDTH, LCD_HEIGHT, LcdColor::WHITE) }
+pub fn lcd_apply(f: impl Fn(&mut [u8; LCD_FRAMEBUFFER_SIZE])) {
+    unsafe {
+        let pixels = ev3_lcd_pixels().cast::<[u8; LCD_FRAMEBUFFER_SIZE]>();
+        let framebuffer = &mut *pixels;
+        f(framebuffer);
+    }
+}
+
+pub fn lcd_clear() {
+    lcd_apply(|fb| fb.fill(0x00));
 }
 
 pub fn motor_config(port: MotorPort, mt: MotorType) -> ER {
@@ -425,6 +442,14 @@ pub fn sensor_get_type(port: SensorPort) -> SensorType {
         let t = ev3_sensor_get_type(port);
         SensorType::from(t)
     }
+}
+
+pub fn touch_sensor_is_pressed(port: SensorPort) -> bool {
+    unsafe { ev3_touch_sensor_is_pressed(port) != 0 }
+}
+
+pub fn analog_sensor_read(port: SensorPort) -> i16 {
+    unsafe { ev3_touch_sensor_analog_read_pin1(port) }
 }
 
 pub fn color_sensor_get_color(port: SensorPort) -> SensorColorCode {
@@ -476,6 +501,22 @@ pub fn infrared_sensor_get_distance(port: SensorPort) -> u8 {
 // fn ht_nxt_color_sensor_measure_color(port: SensorPort, color: *mut u8) -> BoolT;
 // fn ht_nxt_color_sensor_measure_rgb(port: SensorPort, val: *mut rgb_raw_t) -> BoolT;
 // fn nxt_temp_sensor_measure(port: SensorPort, temp: *mut f32) -> BoolT;
+
+pub fn ultrasonic_sensor_get_last_reading_nxt(port: SensorPort) -> i16 {
+    unsafe { nxt_ultrasonic_sensor_get_last_reading(port) }
+}
+
+pub fn ultrasonic_sensor_did_reset_nxt(port: SensorPort) -> bool {
+    unsafe { nxt_ultrasonic_sensor_did_reset(port) != 0 }
+}
+
+pub fn ultrasonic_sensor_request_read_nxt(port: SensorPort) -> bool {
+    unsafe { nxt_ultrasonic_sensor_request_read(port) != 0 }
+}
+
+pub fn ultrasonic_sensor_request_reset_nxt(port: SensorPort) -> bool {
+    unsafe { nxt_ultrasonic_sensor_request_reset(port) != 0 }
+}
 
 pub fn ultrasonic_sensor_get_distance_nxt(port: SensorPort) -> i16 {
     let mut d = 0;
