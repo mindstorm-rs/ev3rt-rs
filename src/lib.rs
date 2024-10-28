@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 #[no_mangle]
 pub extern "C" fn abort() -> ! {
@@ -10,12 +10,23 @@ pub extern "C" fn abort() -> ! {
     sensor_config(SensorPort::S2, SensorType::NONE);
     sensor_config(SensorPort::S3, SensorType::NONE);
     sensor_config(SensorPort::S4, SensorType::NONE);
+    lcd_apply(|fb| {
+        for (index, row) in fb.chunks_exact_mut(LCD_FRAMEBUFFER_ROW_BYTES).enumerate() {
+            if index % 2 == 0 {
+                row.fill(0b10101010);
+            } else {
+                row.fill(0b01010101);
+            }
+        }
+    });
     unsafe { ev3_exit_task() }
     #[warn(clippy::empty_loop)]
     loop {}
 }
 
+#[cfg(not(test))]
 use core::panic::PanicInfo;
+#[cfg(not(test))]
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     abort()
@@ -205,6 +216,95 @@ pub struct IrRemote {
     pub channel: [u8; 4usize],
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct MemFile {
+    buffer: *const u8,
+    filesz: u32,
+    buffersz: u32,
+}
+
+impl MemFile {
+    pub fn new() -> Self {
+        MemFile {
+            buffer: core::ptr::null(),
+            filesz: 0,
+            buffersz: 0,
+        }
+    }
+
+    pub fn load(&mut self, path: &str) -> ER {
+        memfile_load(path, self)
+    }
+
+    pub fn data(&self) -> Option<&[u8]> {
+        if self.buffer.is_null() {
+            None
+        } else {
+            Some(unsafe { core::slice::from_raw_parts(self.buffer, self.filesz as usize) })
+        }
+    }
+
+    pub fn buffer(self) -> Option<MemFileBuffer> {
+        let mut memfile = self;
+        if memfile.buffer.is_null() {
+            memfile_free(&mut memfile);
+            None
+        } else {
+            Some(MemFileBuffer {
+                buffer: memfile.buffer as *mut u8,
+                filesz: memfile.filesz,
+                buffersz: memfile.buffersz,
+            })
+        }
+    }
+
+    pub fn free(self) {
+        let mut memfile = self;
+        memfile_free(&mut memfile);
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct MemFileBuffer {
+    buffer: *mut u8,
+    filesz: u32,
+    buffersz: u32,
+}
+
+impl MemFileBuffer {
+    pub fn data(&self) -> &[u8] {
+        unsafe { core::slice::from_raw_parts(self.buffer, self.filesz as usize) }
+    }
+
+    pub fn data_mut(&self) -> &mut [u8] {
+        unsafe { core::slice::from_raw_parts_mut(self.buffer, self.filesz as usize) }
+    }
+
+    pub fn write(&self, path: &str) -> ER {
+        file_write(path, self.data())
+    }
+
+    pub fn memfile(self) -> MemFile {
+        MemFile {
+            buffer: self.buffer,
+            filesz: self.filesz,
+            buffersz: self.buffersz,
+        }
+    }
+
+    pub fn free(self) {
+        let mut memfile = self.memfile();
+        memfile_free(&mut memfile);
+    }
+}
+
+// pub fn file_write(path: &str, data: &[u8]) -> ER {
+//     let path = str2path(path);
+//     unsafe { ev3_file_write(path.as_ptr(), data.as_ptr(), data.len() as u32) }
+// }
+
 pub type TMO = i32;
 pub type RELTIM = u32;
 pub type HRTCNT = u32;
@@ -273,6 +373,10 @@ extern "C" {
     // fn ev3_speaker_set_volume(volume: u8) -> ER;
     // fn ev3_speaker_play_tone(frequency: u16, duration: i32) -> ER;
     // fn ev3_speaker_stop() -> ER;
+
+    fn ev3_memfile_load(path: *const u8, memfile: *mut MemFile) -> ER;
+    fn ev3_memfile_free(memfile: *mut MemFile) -> ER;
+    fn ev3_file_write(path: *const u8, data: *const u8, size: u32) -> ER;
 
     fn ev3_led_set_color(color: LedColor) -> ER;
 }
@@ -529,6 +633,27 @@ pub fn ultrasonic_sensor_get_distance_nxt(port: SensorPort) -> i16 {
 // fn ev3_speaker_set_volume(volume: u8) -> ER;
 // fn ev3_speaker_play_tone(frequency: u16, duration: i32) -> ER;
 // fn ev3_speaker_stop() -> ER;
+
+const MAX_PATH_LEN: usize = 32;
+fn str2path(s: &str) -> [u8; MAX_PATH_LEN] {
+    let mut c_path = [0u8; MAX_PATH_LEN];
+    for (i, c) in s.bytes().take(MAX_PATH_LEN - 1).enumerate() {
+        c_path[i] = c;
+    }
+    c_path
+}
+
+pub fn memfile_load(path: &str, memfile: &mut MemFile) -> ER {
+    let path = str2path(path);
+    unsafe { ev3_memfile_load(path.as_ptr(), memfile) }
+}
+pub fn memfile_free(memfile: &mut MemFile) -> ER {
+    unsafe { ev3_memfile_free(memfile) }
+}
+pub fn file_write(path: &str, data: &[u8]) -> ER {
+    let path = str2path(path);
+    unsafe { ev3_file_write(path.as_ptr(), data.as_ptr(), data.len() as u32) }
+}
 
 pub fn led_set_color(color: LedColor) -> ER {
     unsafe { ev3_led_set_color(color) }
