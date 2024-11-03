@@ -318,16 +318,17 @@ extern "C" {
     fn ev3_sleep(ticks: i32) -> ER;
 
     fn ev3_bluetooth_agent_set_period_ms(ms: u32);
-    fn ev3_bluetooth_agent_schedule_write(buf: *const u8, size: usize);
-    fn ev3_bluetooth_agent_get_last_char() -> u8;
-    fn ev3_schedule_bluetooth_agent_task();
+    fn ev3_bluetooth_agent_set_master(is_master: BoolT);
+    fn ev3_check_bluetooth_is_connected() -> BoolT;
+    fn ev3_schedule_bluetooth_agent_task() -> BoolT;
+    fn ev3_bt_write_value(value: u32) -> BoolT;
+    fn ev3_connect_to_bluetooth_device(addr: *const u8, pin: *const u8) -> ER;
+    fn ev3_bluetooth_agent_values_read_ptr() -> *mut u32;
+    fn ev3_bluetooth_agent_value_read_ptr() -> *mut u32;
 
     fn ev3_battery_current_mA() -> i32;
     fn ev3_battery_voltage_mV() -> i32;
     fn ev3_button_is_pressed(button: Button) -> BoolT;
-
-    // fn ev3_serial_open_file(port: serial_port_t) -> *mut FILE;
-    // fn ev3_bluetooth_is_connected() -> BoolT;
 
     fn ev3_lcd_set_font(font: LcdFont) -> ER;
     fn ev3_font_get_size(font: LcdFont, width: *mut i32, height: *mut i32) -> ER;
@@ -399,31 +400,179 @@ pub fn msleep(ms: i32) -> ER {
     unsafe { ev3_sleep(ms) }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct BtValue {
+    value: u32,
+}
+
+impl BtValue {
+    pub fn new(value: u32) -> Self {
+        BtValue { value }
+    }
+}
+
+impl From<BtValue> for u32 {
+    fn from(v: BtValue) -> u32 {
+        v.value
+    }
+}
+impl From<u32> for BtValue {
+    fn from(v: u32) -> BtValue {
+        BtValue { value: v }
+    }
+}
+
+impl From<BtValue> for i32 {
+    fn from(v: BtValue) -> i32 {
+        v.value as i32
+    }
+}
+impl From<i32> for BtValue {
+    fn from(v: i32) -> BtValue {
+        BtValue { value: v as u32 }
+    }
+}
+
+impl From<(u16, u16)> for BtValue {
+    fn from(v: (u16, u16)) -> BtValue {
+        BtValue {
+            value: (v.0 as u32) << 16 | v.1 as u32,
+        }
+    }
+}
+impl From<BtValue> for (u16, u16) {
+    fn from(v: BtValue) -> (u16, u16) {
+        ((v.value >> 16) as u16, v.value as u16)
+    }
+}
+
+impl From<(u8, u8, u8, u8)> for BtValue {
+    fn from(v: (u8, u8, u8, u8)) -> BtValue {
+        BtValue {
+            value: (v.0 as u32) << 24 | (v.1 as u32) << 16 | (v.2 as u32) << 8 | v.3 as u32,
+        }
+    }
+}
+impl From<BtValue> for (u8, u8, u8, u8) {
+    fn from(v: BtValue) -> (u8, u8, u8, u8) {
+        (
+            (v.value >> 24) as u8,
+            (v.value >> 16) as u8,
+            (v.value >> 8) as u8,
+            v.value as u8,
+        )
+    }
+}
+
+impl From<(i8, i8, i8, i8)> for BtValue {
+    fn from(v: (i8, i8, i8, i8)) -> BtValue {
+        BtValue {
+            value: (v.0 as u32) << 24 | (v.1 as u32) << 16 | (v.2 as u32) << 8 | v.3 as u32,
+        }
+    }
+}
+impl From<BtValue> for (i8, i8, i8, i8) {
+    fn from(v: BtValue) -> (i8, i8, i8, i8) {
+        (
+            (v.value >> 24) as i8,
+            (v.value >> 16) as i8,
+            (v.value >> 8) as i8,
+            v.value as i8,
+        )
+    }
+}
+
+pub struct BT {
+    value: *mut u32,
+    counter: *mut u32,
+}
+
+impl BT {
+    pub fn new_master(slave: &[u8; 6], pin: &[u8; 4], read_period_ms: u32) -> Option<Self> {
+        bluetooth_agent_set_master(true);
+
+        let connected = unsafe {
+            let er = ev3_connect_to_bluetooth_device(slave.as_ptr(), pin.as_ptr());
+            er == ER::OK
+        };
+        if !connected {
+            return None;
+        }
+
+        if !schedule_bluetooth_agent_task() {
+            return None;
+        }
+
+        if !bluetooth_is_connected() {
+            return None;
+        }
+
+        bluetooth_agent_set_period_ms(read_period_ms);
+
+        Some(BT {
+            value: unsafe { ev3_bluetooth_agent_value_read_ptr() },
+            counter: unsafe { ev3_bluetooth_agent_values_read_ptr() },
+        })
+    }
+
+    pub fn new_slave(read_period_ms: u32) -> Option<Self> {
+        bluetooth_agent_set_master(false);
+
+        if !schedule_bluetooth_agent_task() {
+            return None;
+        }
+
+        if !bluetooth_is_connected() {
+            return None;
+        }
+
+        bluetooth_agent_set_period_ms(read_period_ms);
+
+        Some(BT {
+            value: unsafe { ev3_bluetooth_agent_value_read_ptr() },
+            counter: unsafe { ev3_bluetooth_agent_values_read_ptr() },
+        })
+    }
+
+    pub fn write(&self, value: BtValue) -> bool {
+        unsafe { ev3_bt_write_value(value.into()) != 0 }
+    }
+
+    pub fn read(&self) -> BtValue {
+        unsafe { *self.value }.into()
+    }
+
+    pub fn read_count(&self) -> usize {
+        (unsafe { *self.counter }) as usize
+    }
+
+    pub fn is_connected(&self) -> bool {
+        bluetooth_is_connected()
+    }
+
+    pub fn set_read_period(&self, ms: u32) {
+        bluetooth_agent_set_period_ms(ms);
+    }
+}
+
 pub fn bluetooth_agent_set_period_ms(ms: u32) {
     unsafe {
         ev3_bluetooth_agent_set_period_ms(ms);
     }
 }
 
-pub fn bluetooth_agent_schedule_write(buf: &[u8]) {
+pub fn bluetooth_agent_set_master(is_master: bool) {
     unsafe {
-        ev3_bluetooth_agent_schedule_write(buf.as_ptr(), buf.len());
+        ev3_bluetooth_agent_set_master(if is_master { 1 } else { 0 });
     }
 }
 
-pub fn bluetooth_agent_get_last_char() -> Option<u8> {
-    let received = unsafe { ev3_bluetooth_agent_get_last_char() };
-    if received == 0 {
-        None
-    } else {
-        Some(received)
-    }
+pub fn bluetooth_is_connected() -> bool {
+    unsafe { ev3_check_bluetooth_is_connected() != 0 }
 }
 
-pub fn schedule_bluetooth_agent_task() {
-    unsafe {
-        ev3_schedule_bluetooth_agent_task();
-    }
+pub fn schedule_bluetooth_agent_task() -> bool {
+    unsafe { ev3_schedule_bluetooth_agent_task() != 0 }
 }
 
 pub fn battery_current_ma() -> i32 {
