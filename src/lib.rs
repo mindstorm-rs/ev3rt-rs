@@ -1,5 +1,24 @@
 #![cfg_attr(not(test), no_std)]
 
+extern crate alloc;
+
+struct Ev3Allocator {}
+#[global_allocator]
+static GLOBAL_ALLOCATOR: Ev3Allocator = Ev3Allocator {};
+
+unsafe impl GlobalAlloc for Ev3Allocator {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        ev3_malloc(layout.size())
+            .cast::<u8>()
+            .as_mut()
+            .expect("ev3_malloc failed")
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: core::alloc::Layout) {
+        ev3_free(ptr.cast::<core::ffi::c_void>())
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn abort() -> ! {
     motor_stop(MotorPort::A, false);
@@ -10,6 +29,7 @@ pub extern "C" fn abort() -> ! {
     sensor_config(SensorPort::S2, SensorType::NONE);
     sensor_config(SensorPort::S3, SensorType::NONE);
     sensor_config(SensorPort::S4, SensorType::NONE);
+    led_set_color(LedColor::OFF);
     lcd_apply(|fb| {
         for (index, row) in fb.chunks_exact_mut(LCD_FRAMEBUFFER_ROW_BYTES).enumerate() {
             if index % 2 == 0 {
@@ -24,6 +44,28 @@ pub extern "C" fn abort() -> ! {
     loop {}
 }
 
+pub fn reset() {
+    motor_stop(MotorPort::A, false);
+    motor_stop(MotorPort::B, false);
+    motor_stop(MotorPort::C, false);
+    motor_stop(MotorPort::D, false);
+    sensor_config(SensorPort::S1, SensorType::NONE);
+    sensor_config(SensorPort::S2, SensorType::NONE);
+    sensor_config(SensorPort::S3, SensorType::NONE);
+    sensor_config(SensorPort::S4, SensorType::NONE);
+    led_set_color(LedColor::OFF);
+    lcd_apply(|fb| {
+        for (index, row) in fb.chunks_exact_mut(LCD_FRAMEBUFFER_ROW_BYTES).enumerate() {
+            if index % 2 == 0 {
+                row.fill(0b10101010);
+            } else {
+                row.fill(0b01010101);
+            }
+        }
+    });
+}
+
+use core::alloc::GlobalAlloc;
 #[cfg(not(test))]
 use core::panic::PanicInfo;
 #[cfg(not(test))]
@@ -313,6 +355,9 @@ pub type SYSUTM = u64;
 pub type BoolT = i8;
 
 extern "C" {
+    fn ev3_malloc(size: usize) -> *mut core::ffi::c_void;
+    fn ev3_free(ptr: *mut core::ffi::c_void) -> ();
+
     fn ev3_exit_task() -> ();
     fn ev3_get_utm(p_sysutm: &mut SYSUTM) -> ER;
     fn ev3_sleep(ticks: i32) -> ER;
@@ -482,6 +527,7 @@ impl From<BtValue> for (i8, i8, i8, i8) {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct BT {
     value: *mut u32,
     counter: *mut u32,

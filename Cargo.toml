@@ -4,6 +4,7 @@ version = "0.8.0"
 authors = ["Massimiliano Mantione <massimiliano.mantione@gmail.com>"]
 description = "Rust bindings for ev3rt"
 license= "MIT"
+edition = "2021"
 
 [lib]
 crate-type = ["lib"]
