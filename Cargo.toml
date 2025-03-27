@@ -12,7 +12,7 @@ crate-type = ["lib"]
 [dependencies]
 
 [profile.dev]
-panic = "abort"
+#panic = "abort"
 
 [profile.release]
-panic = "abort"
+#panic = "abort"

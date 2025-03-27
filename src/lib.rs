@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), no_std)]
+#![no_std]
 
 extern crate alloc;
 
@@ -19,8 +19,7 @@ unsafe impl GlobalAlloc for Ev3Allocator {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn abort() -> ! {
+pub fn reset(is_panic: bool) {
     motor_stop(MotorPort::A, false);
     motor_stop(MotorPort::B, false);
     motor_stop(MotorPort::C, false);
@@ -30,48 +29,116 @@ pub extern "C" fn abort() -> ! {
     sensor_config(SensorPort::S3, SensorType::NONE);
     sensor_config(SensorPort::S4, SensorType::NONE);
     led_set_color(LedColor::OFF);
-    lcd_apply(|fb| {
-        for (index, row) in fb.chunks_exact_mut(LCD_FRAMEBUFFER_ROW_BYTES).enumerate() {
-            if index % 2 == 0 {
-                row.fill(0b10101010);
-            } else {
-                row.fill(0b01010101);
+    if is_panic {
+        lcd_apply(|fb| {
+            for (index, row) in fb.chunks_exact_mut(LCD_FRAMEBUFFER_ROW_BYTES).enumerate() {
+                if index % 2 == 0 {
+                    row.fill(0b10101010);
+                } else {
+                    row.fill(0b01010101);
+                }
             }
+        });
+        for _ in 0..4 {
+            flash_led(LedColor::RED);
         }
-    });
+    } else {
+        lcd_clear();
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn abort() -> ! {
     unsafe { ev3_exit_task() }
     #[warn(clippy::empty_loop)]
     loop {}
 }
 
-pub fn reset() {
-    motor_stop(MotorPort::A, false);
-    motor_stop(MotorPort::B, false);
-    motor_stop(MotorPort::C, false);
-    motor_stop(MotorPort::D, false);
-    sensor_config(SensorPort::S1, SensorType::NONE);
-    sensor_config(SensorPort::S2, SensorType::NONE);
-    sensor_config(SensorPort::S3, SensorType::NONE);
-    sensor_config(SensorPort::S4, SensorType::NONE);
-    led_set_color(LedColor::OFF);
-    lcd_apply(|fb| {
-        for (index, row) in fb.chunks_exact_mut(LCD_FRAMEBUFFER_ROW_BYTES).enumerate() {
-            if index % 2 == 0 {
-                row.fill(0b10101010);
-            } else {
-                row.fill(0b01010101);
-            }
-        }
-    });
+const PANIC_DATA_SIZE: usize = 512;
+const PANIC_FILE: &str = "PANIC.txt";
+struct PanicData {
+    data: [u8; PANIC_DATA_SIZE],
+    offset: usize,
 }
 
-use core::alloc::GlobalAlloc;
-#[cfg(not(test))]
-use core::panic::PanicInfo;
+impl PanicData {
+    pub fn new() -> Self {
+        PanicData {
+            data: [0; PANIC_DATA_SIZE],
+            offset: 0,
+        }
+    }
+
+    pub fn close(&mut self) {
+        if self.offset >= PANIC_DATA_SIZE {
+            self.offset = PANIC_DATA_SIZE - 1;
+        }
+        self.data[self.offset] = '\n' as u8;
+        self.offset = PANIC_DATA_SIZE;
+    }
+
+    pub fn save(&self) {
+        let mut file = MemFile::new();
+        file.load(PANIC_FILE);
+        if let Some(buffer) = file.buffer() {
+            let data = buffer.data_mut();
+            if data.len() == PANIC_DATA_SIZE {
+                data.copy_from_slice(&self.data);
+                buffer.write(PANIC_FILE);
+            }
+        }
+        file.free();
+    }
+}
+
+pub fn reset_ev3_panic_file() {
+    let mut data = PanicData::new();
+    data.write_str("panic data ready").ok();
+    data.close();
+    data.save();
+}
+
+impl Write for PanicData {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.bytes() {
+            if self.offset < PANIC_DATA_SIZE {
+                self.data[self.offset] = c;
+                self.offset += 1;
+            }
+        }
+        core::fmt::Result::Ok(())
+    }
+}
+
+fn flash_led(color: LedColor) {
+    led_set_color(color);
+    msleep(500);
+    led_set_color(LedColor::OFF);
+    msleep(500);
+}
+
+use core::{alloc::GlobalAlloc, fmt::Write};
 #[cfg(not(test))]
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    abort()
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    reset(true);
+    let mut data = PanicData::new();
+    if let Some(location) = info.location() {
+        writeln!(
+            &mut data,
+            "panic at {}:{}",
+            //location.file(),
+            "FILE",
+            location.line()
+        )
+        .ok();
+    } else {
+        writeln!(&mut data, "panic at unknown location").ok();
+    }
+    writeln!(&mut data, "message: {}", info.message()).ok();
+    data.close();
+    data.save();
+    abort();
 }
 
 #[repr(i32)]
@@ -436,7 +503,7 @@ pub fn get_utime() -> SYSUTM {
     match get_utm(&mut res) {
         ER::OK => res,
         _ => {
-            abort();
+            panic!("get_utime failed");
         }
     }
 }
@@ -512,7 +579,10 @@ impl From<BtValue> for (u8, u8, u8, u8) {
 impl From<(i8, i8, i8, i8)> for BtValue {
     fn from(v: (i8, i8, i8, i8)) -> BtValue {
         BtValue {
-            value: (v.0 as u32) << 24 | (v.1 as u32) << 16 | (v.2 as u32) << 8 | v.3 as u32,
+            value: ((v.0 as i32 & 0xff) << 24
+                | (v.1 as i32 & 0xff) << 16
+                | (v.2 as i32 & 0xff) << 8
+                | (v.3 as i32 & 0xff)) as u32,
         }
     }
 }
