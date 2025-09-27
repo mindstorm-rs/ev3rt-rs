@@ -451,6 +451,7 @@ extern "C" {
     fn ev3_motor_config(port: MotorPort, mt: MotorType) -> ER;
     fn ev3_motor_get_type(port: MotorPort) -> ErUint;
     fn ev3_motor_get_counts(port: MotorPort) -> i32;
+    fn ev3_motor_get_ticks(port: MotorPort) -> u32;
     fn ev3_motor_reset_counts(port: MotorPort) -> ER;
     fn ev3_motor_set_power(port: MotorPort, power: i32) -> ER;
     fn ev3_motor_get_power(port: MotorPort) -> i32;
@@ -784,6 +785,10 @@ pub fn motor_get_type(port: MotorPort) -> MotorType {
 
 pub fn motor_get_counts(port: MotorPort) -> i32 {
     unsafe { ev3_motor_get_counts(port) }
+}
+
+pub fn motor_get_ticks(port: MotorPort) -> u32 {
+    unsafe { ev3_motor_get_ticks(port) }
 }
 
 pub fn motor_reset_counts(port: MotorPort) -> ER {
